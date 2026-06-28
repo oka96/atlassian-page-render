@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Confluence PlantUML Renderer",
+  "description": "Render PlantUML code snippets directly inside Atlassian Confluence pages.",
+  "version": "0.1.0",
+  "background": {
+    "service_worker": "src/service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.atlassian.net/wiki/*",
+        "http://127.0.0.1:4173/examples/confluence-extension-fixture.html*",
+        "http://localhost:4173/examples/confluence-extension-fixture.html*"
+      ],
+      "js": ["src/plantuml-codec.js", "src/content-script.js"],
+      "css": ["src/content-styles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "host_permissions": ["https://www.plantuml.com/plantuml/svg/*"]
+}
