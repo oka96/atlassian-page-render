@@ -135,11 +135,35 @@ Extension --> Editor: preview
       </div>
     </div>
 
-    <script src="../src/plantuml-codec.js"></script>
-    <script src="../src/content-script.js"></script>
     <script>
       const fixtureParams = new URLSearchParams(window.location.search);
 
+      if (fixtureParams.has("mockExtensionRender")) {
+        const mockRenderDelay = fixtureParams.has("slowMockRender") ? 1000 : 25;
+
+        globalThis.chrome = {
+          runtime: {
+            lastError: null,
+            sendMessage(message, callback) {
+              window.setTimeout(() => {
+                const label = String(message?.source || "")
+                  .replace(/[<&>]/g, "")
+                  .slice(0, 36);
+
+                callback({
+                  ok: true,
+                  svg: `<svg xmlns="http://www.w3.org/2000/svg" width="320px" height="140px" viewBox="0 0 320 140"><rect width="320" height="140" rx="8" fill="#e9f2ff"/><text x="18" y="72" fill="#0c3b70" font-family="sans-serif" font-size="14">Mock PlantUML ${label}</text></svg>`,
+                  url: "https://www.plantuml.com/plantuml/svg/mock"
+                });
+              }, mockRenderDelay);
+            }
+          }
+        };
+      }
+    </script>
+    <script src="../src/plantuml-codec.js"></script>
+    <script src="../src/content-script.js"></script>
+    <script>
       if (fixtureParams.has("embeddedAdf")) {
         const embeddedSource = `@startuml
 Alice -> Bob: full source from embedded ADF
@@ -227,6 +251,25 @@ Extension --> Editor: live preview
           })
         );
       }, 1800);
+
+      if (fixtureParams.has("moveEditSource")) {
+        window.setTimeout(() => {
+          const editCode = document.getElementById("edit-mode-code");
+
+          if (!editCode) {
+            return;
+          }
+
+          const heading = document.createElement("h2");
+          heading.textContent = "Moved edit mode preview";
+
+          const movedShell = document.createElement("div");
+          movedShell.className = "editor-shell moved-editor-shell";
+          movedShell.setAttribute("data-testid", "ak-editor-content-area");
+          movedShell.append(editCode);
+          document.body.append(heading, movedShell);
+        }, 3400);
+      }
 
       if (fixtureParams.has("transientIncomplete")) {
         const transientIncompleteDelay = fixtureParams.has("slowTransient") ? 7000 : 2400;

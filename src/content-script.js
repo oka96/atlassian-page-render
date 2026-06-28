@@ -6,6 +6,7 @@
   const VISIBLE_SOURCE_CLASS = "confluence-puml-source-visible";
   const EDIT_SOURCE_CLASS = "confluence-puml-edit-source";
   const EDIT_ROW_CLASS = "confluence-puml-edit-row";
+  const EDIT_LAYOUT_CLASS = "confluence-puml-edit-layout";
   const DEFAULT_PLANTUML_SERVER = "https://www.plantuml.com/plantuml";
   const RENDER_FORMAT = "svg";
   const SCAN_DEBOUNCE_MS = 150;
@@ -447,25 +448,64 @@
     );
   }
 
-  function editLayoutElementFor(sourceElement) {
-    return sourceElement.parentElement;
+  function createEditLayoutElement(sourceElement, wrapper) {
+    const layoutElement = document.createElement("div");
+    layoutElement.className = `${EDIT_LAYOUT_CLASS} ${EDIT_ROW_CLASS}`;
+    layoutElement.setAttribute("data-confluence-puml-edit-layout", "true");
+    sourceElement.before(layoutElement);
+    layoutElement.append(sourceElement, wrapper);
+    return layoutElement;
   }
 
-  function removeEditRowClass(state) {
+  function unwrapEditLayout(state) {
     const layoutElement = state.editLayoutElement;
 
     if (!layoutElement) {
       return;
     }
 
-    const isStillUsed = Array.from(activeStates).some(
-      (activeState) =>
-        activeState !== state && activeState.editLayoutElement === layoutElement
-    );
-
-    if (!isStillUsed) {
-      layoutElement.classList.remove(EDIT_ROW_CLASS);
+    if (layoutElement.isConnected && state.sourceElement.isConnected) {
+      layoutElement.before(state.sourceElement);
     }
+
+    layoutElement.remove();
+  }
+
+  function repairEditLayout(state) {
+    if (!state.sourceElement.isConnected) {
+      return false;
+    }
+
+    let layoutElement = state.editLayoutElement;
+    const layoutHasSource =
+      layoutElement?.isConnected && layoutElement.contains(state.sourceElement);
+
+    if (!layoutHasSource) {
+      const staleLayoutElement = layoutElement;
+      layoutElement = createEditLayoutElement(state.sourceElement, state.wrapper);
+      state.editLayoutElement = layoutElement;
+
+      if (staleLayoutElement?.isConnected) {
+        staleLayoutElement.remove();
+      }
+    }
+
+    if (
+      state.wrapper.parentElement !== layoutElement ||
+      state.sourceElement.nextElementSibling !== state.wrapper
+    ) {
+      state.sourceElement.after(state.wrapper);
+    }
+
+    return state.wrapper.isConnected && layoutElement.contains(state.wrapper);
+  }
+
+  function isRendererAttached(state) {
+    if (state.mode === "edit") {
+      return repairEditLayout(state);
+    }
+
+    return state.sourceElement.isConnected && state.wrapper.isConnected;
   }
 
   function shouldKeepInvalidEditRenderer(state) {
@@ -536,15 +576,16 @@
     output.append(message, diagram);
     wrapper.append(toolbar, output);
 
-    sourceElement.after(wrapper);
-
     const editLayoutElement =
-      mode === "edit" ? editLayoutElementFor(sourceElement) : null;
+      mode === "edit" ? createEditLayoutElement(sourceElement, wrapper) : null;
+
+    if (mode !== "edit") {
+      sourceElement.after(wrapper);
+    }
 
     if (mode === "edit") {
       sourceElement.classList.add(EDIT_SOURCE_CLASS);
       sourceElement.style.setProperty("display", "inline-flex", "important");
-      editLayoutElement?.classList.add(EDIT_ROW_CLASS);
     } else {
       sourceElement.classList.add(HIDDEN_SOURCE_CLASS);
     }
@@ -590,18 +631,29 @@
 
     if (state.mode === "edit") {
       state.sourceElement.style.removeProperty("display");
-      removeEditRowClass(state);
+      unwrapEditLayout(state);
+    } else {
+      state.wrapper.remove();
     }
 
-    state.wrapper.remove();
     activeStates.delete(state);
     stateBySource.delete(state.sourceElement);
   }
 
   function setLoading(state) {
+    const shouldPreserveEditPreview =
+      state.mode === "edit" && state.diagram.childElementCount > 0;
+
     state.wrapper.classList.remove("confluence-puml-has-error");
-    state.message.hidden = false;
     state.message.textContent = "Rendering PlantUML...";
+
+    if (shouldPreserveEditPreview) {
+      state.message.hidden = true;
+      state.diagram.hidden = false;
+      return;
+    }
+
+    state.message.hidden = false;
     state.diagram.hidden = true;
     state.diagram.replaceChildren();
   }
@@ -764,7 +816,7 @@
 
   function scan(root) {
     for (const state of Array.from(activeStates)) {
-      if (!state.sourceElement.isConnected || !state.wrapper.isConnected) {
+      if (!isRendererAttached(state)) {
         removeRenderer(state);
       }
     }
