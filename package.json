@@ -4,7 +4,7 @@
   "private": true,
   "description": "Chrome extension that renders PlantUML snippets inside Atlassian Confluence pages.",
   "scripts": {
-    "check": "node --check src/plantuml-codec.js && node --check src/content-script.js && node --check src/service-worker.js",
+    "check": "node --check src/plantuml-codec.js && node --check src/content-script.js && node --check src/service-worker.js && node --check src/popup.js",
     "test": "node --test test/*.test.js",
     "verify": "npm run check && npm test"
   },

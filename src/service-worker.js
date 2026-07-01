@@ -41,8 +41,56 @@ async function fetchPlantUmlSvg(source) {
   }
 }
 
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  let binary = "";
+
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+
+  return btoa(binary);
+}
+
+async function fetchPlantUmlPng(source) {
+  const encoded = await globalThis.PlantUmlCodec.encode(source);
+  const url = `${PLANTUML_SERVER}/png/${encoded}`;
+  const timeout = timeoutSignal(REQUEST_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      credentials: "omit",
+      signal: timeout.signal
+    });
+
+    // The PlantUML server answers diagram syntax errors with a non-2xx status
+    // (still an image). Treat those as failures so a broken "error image" is
+    // never inserted into the page.
+    if (!response.ok) {
+      throw new Error(`PlantUML server returned HTTP ${response.status}.`);
+    }
+
+    const contentType = response.headers.get("content-type") || "";
+
+    if (!contentType.includes("image/png")) {
+      throw new Error("PlantUML server did not return a PNG image.");
+    }
+
+    return {
+      pngBase64: arrayBufferToBase64(await response.arrayBuffer()),
+      url
+    };
+  } finally {
+    timeout.cancel();
+  }
+}
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type !== "confluence-puml-render") {
+  if (
+    message?.type !== "confluence-puml-render" &&
+    message?.type !== "confluence-puml-render-png"
+  ) {
     return false;
   }
 
@@ -54,12 +102,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return false;
   }
 
-  fetchPlantUmlSvg(message.source)
-    .then(({ svg, url }) => {
+  const request =
+    message.type === "confluence-puml-render-png"
+      ? fetchPlantUmlPng(message.source)
+      : fetchPlantUmlSvg(message.source);
+
+  request
+    .then((result) => {
       sendResponse({
         ok: true,
-        svg,
-        url
+        ...result
       });
     })
     .catch((error) => {

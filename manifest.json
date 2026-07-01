@@ -6,6 +6,10 @@
   "background": {
     "service_worker": "src/service-worker.js"
   },
+  "action": {
+    "default_popup": "src/popup.html",
+    "default_title": "Confluence PlantUML Renderer"
+  },
   "content_scripts": [
     {
       "matches": [
@@ -18,5 +22,9 @@
       "run_at": "document_idle"
     }
   ],
-  "host_permissions": ["https://www.plantuml.com/plantuml/svg/*"]
+  "permissions": ["clipboardWrite", "storage"],
+  "host_permissions": [
+    "https://www.plantuml.com/plantuml/svg/*",
+    "https://www.plantuml.com/plantuml/png/*"
+  ]
 }
